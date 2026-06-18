@@ -1047,10 +1047,21 @@ with left_col:
         else:
             with st.spinner("Running AI prediction model…"):
                 try:
-                    area_encoded  = area_encoder.transform([country])[0]
-                    item_encoded  = item_encoder.transform([crop])[0]
-                    features      = np.array([[year, rainfall, pesticides, temperature, area_encoded, item_encoded]])
-                    prediction    = float(model.predict(features)[0])
+                    area_encoded = area_encoder.transform([country])[0]
+item_encoded = item_encoder.transform([crop])[0]
+
+features = pd.DataFrame({
+    "Area": [area_encoded],
+    "Item": [item_encoded],
+    "Year": [year],
+    "average_rain_fall_mm_per_year": [rainfall],
+    "pesticides_tonnes": [pesticides],
+    "avg_temp": [temperature]
+})
+
+st.write(features)   # TEMPORARY DEBUG
+
+prediction = float(model.predict(features)[0])
                     confidence    = get_confidence_range(model, features)
                     warnings_list = get_warnings(crop, rainfall, pesticides, temperature)
                     weather_theme = get_weather_theme(rainfall, temperature)
