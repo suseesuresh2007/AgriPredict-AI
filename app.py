@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import pickle
+import joblib
 import random
 import plotly.graph_objects as go
 import plotly.express as px
@@ -24,9 +24,9 @@ st.set_page_config(
 # =============================================================================
 @st.cache_resource
 def load_artifacts():
-    model = pickle.load(open("crop_yield_model.pkl", "rb"))
-    area_encoder = pickle.load(open("area_encoder.pkl", "rb"))
-    item_encoder = pickle.load(open("item_encoder.pkl", "rb"))
+    model = joblib.load("crop_yield_model.pkl")
+    area_encoder = joblib.load("area_encoder.pkl")
+    item_encoder = joblib.load("item_encoder.pkl")
     return model, area_encoder, item_encoder
 
 MODEL_LOADED = True
