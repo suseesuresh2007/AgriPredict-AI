@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # =============================================================================
-# MODEL / ENCODER LOADING  ← UNCHANGED
+# MODEL / ENCODER LOADING
 # =============================================================================
 @st.cache_resource
 def load_artifacts():
@@ -39,7 +39,7 @@ except Exception as e:
     model, area_encoder, item_encoder = None, None, None
 
 # =============================================================================
-# STATIC PROJECT DATA  ← UNCHANGED
+# STATIC PROJECT DATA
 # =============================================================================
 CROPS_FALLBACK = [
     "Cassava", "Maize", "Plantains and others", "Potatoes", "Rice, paddy",
@@ -117,7 +117,7 @@ if "show_result" not in st.session_state:
     st.session_state["show_result"] = False
 
 # =============================================================================
-# HELPER FUNCTIONS  ← UNCHANGED LOGIC
+# HELPER FUNCTIONS
 # =============================================================================
 def get_confidence_range(model, features):
     """Use per-tree variance for confidence interval."""
@@ -282,7 +282,6 @@ def build_floating_html():
 def build_weather_particles(theme, rainfall=0, temperature=25):
     """Render dynamic weather-themed particles based on climate inputs."""
     if theme == "drought":
-        # Heat shimmer particles — amber/orange dots
         particles = []
         for _ in range(20):
             left = random.randint(5, 95)
@@ -297,7 +296,6 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(particles)}</div>'
 
     elif theme == "tropical":
-        # Heavy rain effect
         drops = []
         for _ in range(70):
             left = random.randint(0, 100)
@@ -311,7 +309,6 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(drops)}</div>'
 
     elif theme == "cold":
-        # Snowflake-like dots
         flakes = []
         for _ in range(30):
             left = random.randint(5, 95)
@@ -325,7 +322,6 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(flakes)}</div>'
 
     elif theme == "lush":
-        # Floating green sparkles
         sparks = []
         for _ in range(25):
             left = random.randint(5, 95)
@@ -623,7 +619,6 @@ header    { visibility: hidden; }
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
     line-height: 1.1;
 }
-/* Animated counter effect */
 .kpi-value.counting { animation: countUp 1.2s ease forwards; }
 @keyframes countUp {
     0%   { opacity: 0; transform: translateY(12px); }
@@ -961,7 +956,7 @@ if not MODEL_LOADED:
     )
 
 # =============================================================================
-# SECTION 2 — KPI DASHBOARD (animated counters via CSS)
+# SECTION 2 — KPI DASHBOARD
 # =============================================================================
 st.markdown(
     """
@@ -1041,43 +1036,39 @@ with left_col:
 
         submitted = st.form_submit_button("🔮 Generate Yield Forecast", use_container_width=True)
 
+    # ── FIX 1: All prediction logic is correctly inside the `if submitted:` block
+    # ── FIX 2: Removed stray `st.write(features)` debug line
+    # ── FIX 3: Removed duplicate `prediction = float(model.predict(features)[0])` outside try
     if submitted:
         if not MODEL_LOADED:
             st.error("Prediction unavailable — model artifacts are missing from this directory.")
         else:
-             with st.spinner("Running AI prediction model..."):
-                  try:
-                         area_encoded = area_encoder.transform([country])[0]
-                         item_encoded = item_encoder.transform([crop])[0]
+            with st.spinner("Running AI prediction model..."):
+                try:
+                    area_encoded = area_encoder.transform([country])[0]
+                    item_encoded = item_encoder.transform([crop])[0]
 
-                         features = pd.DataFrame({
-                         "Area": [area_encoded],
-                         "Item": [item_encoded],
-                         "Year": [year],
-                         "average_rain_fall_mm_per_year": [rainfall],
-                         "pesticides_tonnes": [pesticides],
-                         "avg_temp": [temperature]
-                       })
+                    features = pd.DataFrame({
+                        "Area": [area_encoded],
+                        "Item": [item_encoded],
+                        "Year": [year],
+                        "average_rain_fall_mm_per_year": [rainfall],
+                        "pesticides_tonnes": [pesticides],
+                        "avg_temp": [temperature],
+                    })
 
-                        prediction = float(model.predict(features)[0])
-
-    except Exception as e:
-        st.error(f"Prediction failed: {e}")
-
-st.write(features)   # TEMPORARY DEBUG
-
-prediction = float(model.predict(features)[0])
-                    confidence    = get_confidence_range(model, features)
+                    prediction = float(model.predict(features)[0])
+                    confidence = get_confidence_range(model, features)
                     warnings_list = get_warnings(crop, rainfall, pesticides, temperature)
                     weather_theme = get_weather_theme(rainfall, temperature)
 
-                    st.session_state["prediction"]    = prediction
-                    st.session_state["confidence"]    = confidence
-                    st.session_state["warnings"]      = warnings_list
-                    st.session_state["pred_country"]  = country
-                    st.session_state["pred_crop"]     = crop
+                    st.session_state["prediction"] = prediction
+                    st.session_state["confidence"] = confidence
+                    st.session_state["warnings"] = warnings_list
+                    st.session_state["pred_country"] = country
+                    st.session_state["pred_crop"] = crop
                     st.session_state["weather_theme"] = weather_theme
-                    st.session_state["pred_inputs"]   = {
+                    st.session_state["pred_inputs"] = {
                         "year": year, "rainfall": rainfall,
                         "pesticides": pesticides, "temperature": temperature,
                     }
@@ -1086,15 +1077,15 @@ prediction = float(model.predict(features)[0])
                     # Append to history
                     status_label, _, _, _ = yield_status(prediction)
                     st.session_state["prediction_history"].append({
-                        "Timestamp":       datetime.now().strftime("%H:%M:%S"),
-                        "Country":         country,
-                        "Crop":            crop,
-                        "Year":            year,
-                        "Rainfall (mm)":   rainfall,
-                        "Temp (°C)":       temperature,
-                        "Pesticides (t)":  pesticides,
-                        "Yield (hg/ha)":   f"{prediction:,.0f}",
-                        "Status":          status_label,
+                        "Timestamp": datetime.now().strftime("%H:%M:%S"),
+                        "Country": country,
+                        "Crop": crop,
+                        "Year": year,
+                        "Rainfall (mm)": rainfall,
+                        "Temp (°C)": temperature,
+                        "Pesticides (t)": pesticides,
+                        "Yield (hg/ha)": f"{prediction:,.0f}",
+                        "Status": status_label,
                     })
                 except Exception as e:
                     st.session_state["show_result"] = False
@@ -1177,7 +1168,11 @@ if st.session_state.get("show_result"):
             hi = pred_value + confidence
             confidence_html = f'<div class="result-confidence">95% range: {lo:,.0f} – {hi:,.0f} hg/ha  (±{confidence:,.0f})</div>'
 
-        weather_particles_html = build_weather_particles(weather_theme, pred_inputs.get("rainfall", 0), pred_inputs.get("temperature", 25))
+        weather_particles_html = build_weather_particles(
+            weather_theme,
+            pred_inputs.get("rainfall", 0),
+            pred_inputs.get("temperature", 25),
+        )
         st.markdown(
             f"""
             <div class="result-card">
@@ -1219,10 +1214,43 @@ if st.session_state.get("show_result"):
             unsafe_allow_html=True,
         )
 
-    # ── AI Recommendation Cards ───────────────────────────────────────────────
-  
+    # ── FIX 4: AI Recommendation Cards — fully implemented (was only a comment stub)
+    st.markdown(
+        """
+        <div class="sec-head" style="margin-top:32px;">
+            <div class="sec-tag">Smart Recommendations</div>
+            <div class="sec-title">AI Agronomic Insights</div>
+            <div class="sec-desc">Contextual advice generated from your climate inputs and predicted yield outcome.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    ai_cards = get_ai_recommendations(
+        pred_crop,
+        pred_inputs.get("rainfall", 0),
+        pred_inputs.get("temperature", 25),
+        pred_inputs.get("pesticides", 0),
+        pred_value,
+    )
+
+    ai_cards_html = "".join(
+        f"""
+        <div class="ai-card">
+            <div class="ai-card-icon">{icon}</div>
+            <div class="ai-card-title">{title}</div>
+            <div class="ai-card-body">{body}</div>
+        </div>
+        """
+        for icon, title, body in ai_cards
+    )
+    st.markdown(
+        f'<div class="ai-insight-grid">{ai_cards_html}</div>',
+        unsafe_allow_html=True,
+    )
+
     # ==========================================================================
-    # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS  ← UNCHANGED LOGIC
+    # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS
     # ==========================================================================
     st.markdown('<hr class="fancy-divider">', unsafe_allow_html=True)
     st.markdown(
@@ -1239,12 +1267,12 @@ if st.session_state.get("show_result"):
     if MODEL_LOADED:
         whatif_tabs = st.tabs(["🌡️ Temperature", "🌧️ Rainfall", "🧪 Pesticides", "📅 Year"])
 
-        base_year        = pred_inputs.get("year", 2024)
-        base_rainfall    = pred_inputs.get("rainfall", 1100.0)
-        base_pesticides  = pred_inputs.get("pesticides", 1500.0)
-        base_temp        = pred_inputs.get("temperature", 25.0)
-        area_enc         = area_encoder.transform([pred_country])[0]
-        item_enc         = item_encoder.transform([pred_crop])[0]
+        base_year       = pred_inputs.get("year", 2024)
+        base_rainfall   = pred_inputs.get("rainfall", 1100.0)
+        base_pesticides = pred_inputs.get("pesticides", 1500.0)
+        base_temp       = pred_inputs.get("temperature", 25.0)
+        area_enc        = area_encoder.transform([pred_country])[0]
+        item_enc        = item_encoder.transform([pred_crop])[0]
 
         def make_whatif_fig(x_vals, yields, x_label, current_x, current_y):
             fig = go.Figure()
@@ -1275,24 +1303,37 @@ if st.session_state.get("show_result"):
             )
             return fig
 
+        # ── FIX 5: All what-if predictions use a proper named DataFrame
+        #    instead of a raw list, matching the column order the model was trained on.
+        def predict_single(year_v, rainfall_v, pest_v, temp_v, area_v, item_v):
+            df = pd.DataFrame({
+                "Area": [area_v],
+                "Item": [item_v],
+                "Year": [year_v],
+                "average_rain_fall_mm_per_year": [rainfall_v],
+                "pesticides_tonnes": [pest_v],
+                "avg_temp": [temp_v],
+            })
+            return float(model.predict(df)[0])
+
         with whatif_tabs[0]:
-            temps   = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
-            yields_t = [float(model.predict([[base_year, base_rainfall, base_pesticides, t, area_enc, item_enc]])[0]) for t in temps]
+            temps = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
+            yields_t = [predict_single(base_year, base_rainfall, base_pesticides, t, area_enc, item_enc) for t in temps]
             st.plotly_chart(make_whatif_fig(temps, yields_t, "Temperature (°C)", base_temp, pred_value), use_container_width=True)
 
         with whatif_tabs[1]:
-            rains   = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
-            yields_r = [float(model.predict([[base_year, r, base_pesticides, base_temp, area_enc, item_enc]])[0]) for r in rains]
+            rains = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
+            yields_r = [predict_single(base_year, r, base_pesticides, base_temp, area_enc, item_enc) for r in rains]
             st.plotly_chart(make_whatif_fig(rains, yields_r, "Rainfall (mm/yr)", base_rainfall, pred_value), use_container_width=True)
 
         with whatif_tabs[2]:
-            pests   = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
-            yields_p = [float(model.predict([[base_year, base_rainfall, p, base_temp, area_enc, item_enc]])[0]) for p in pests]
+            pests = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
+            yields_p = [predict_single(base_year, base_rainfall, p, base_temp, area_enc, item_enc) for p in pests]
             st.plotly_chart(make_whatif_fig(pests, yields_p, "Pesticides (tonnes)", base_pesticides, pred_value), use_container_width=True)
 
         with whatif_tabs[3]:
-            years   = np.arange(1990, 2031, 1)
-            yields_y = [float(model.predict([[int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc]])[0]) for y in years]
+            years = np.arange(1990, 2031, 1)
+            yields_y = [predict_single(int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc) for y in years]
             st.plotly_chart(make_whatif_fig(years, yields_y, "Year", base_year, pred_value), use_container_width=True)
 
 # =============================================================================
