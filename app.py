@@ -1204,36 +1204,7 @@ if st.session_state.get("show_result"):
         )
 
     # ── AI Recommendation Cards ───────────────────────────────────────────────
-    insights = get_ai_recommendations(
-        pred_crop,
-        pred_inputs.get("rainfall", 0),
-        pred_inputs.get("temperature", 25),
-        pred_inputs.get("pesticides", 0),
-        pred_value,
-    )
-    st.markdown(
-        """
-        <div class="sec-head" style="margin-top:36px;">
-            <div class="sec-tag">AI Advisory</div>
-            <div class="sec-title">Smart Recommendations</div>
-            <div class="sec-desc">Context-aware agronomic insights derived from your input parameters.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    cards_html = "".join(
-        f"""
-        <div class="ai-card">
-            <div class="ai-card-icon">{icon}</div>
-            <div class="ai-card-title">{title}</div>
-            <div class="ai-card-body">{body}</div>
-        </div>
-        """
-        for icon, title, body in insights
-    )
-    st.markdown(f'<div class="ai-insight-grid">{cards_html}</div>', unsafe_allow_html=True)
-
+  
     # ==========================================================================
     # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS  ← UNCHANGED LOGIC
     # ==========================================================================
