@@ -195,42 +195,6 @@ def get_weather_description(theme):
     }
     return desc.get(theme, ("🌍 Variable Climate", "Mixed conditions detected."))
 
-def get_ai_recommendations(crop, rainfall, temperature, pesticides, pred_value):
-    """Generate contextual AI insight cards based on inputs."""
-    insights = []
-
-    # Yield tier insight
-    if pred_value >= 100000:
-        insights.append(("🏆", "Excellent Yield Potential", "Predicted yield is in the top tier. Current conditions align well with this crop's optimal growth profile."))
-    elif pred_value >= 50000:
-        insights.append(("📈", "Strong Yield Forecast", "Conditions support above-average production. Minor climate optimizations could push yield further."))
-    elif pred_value >= 20000:
-        insights.append(("⚙️", "Moderate Yield Expected", "Yield is within normal range. Review pesticide levels and irrigation strategy for improvement."))
-    else:
-        insights.append(("⚠️", "Below-Average Yield Risk", "Consider switching to a drought-tolerant variety or adjusting the growing season."))
-
-    # Rainfall insight
-    if rainfall < 400:
-        insights.append(("💧", "Irrigation Advisory", f"At {rainfall:.0f} mm/yr, supplemental irrigation is likely needed. Consider drip systems for efficiency."))
-    elif rainfall > 2500:
-        insights.append(("🌊", "Drainage Management", f"High rainfall ({rainfall:.0f} mm/yr) may cause waterlogging. Ensure raised beds and adequate drainage channels."))
-
-    # Temperature insight
-    if crop in CROP_TYPICAL_TEMP:
-        ct_min, ct_max = CROP_TYPICAL_TEMP[crop]
-        if ct_min <= temperature <= ct_max:
-            insights.append(("🌡️", "Optimal Temperature Window", f"{temperature:.1f}°C is within the ideal range for {crop} ({ct_min}–{ct_max}°C). Thermal conditions are favorable."))
-        elif temperature > ct_max:
-            insights.append(("🔥", "Heat Stress Risk", f"At {temperature:.1f}°C, {crop} may experience heat stress. Consider shade netting or shifting harvest calendar."))
-
-    # Pesticide insight
-    if pesticides < 100:
-        insights.append(("🌿", "Low Pesticide Input", "Minimal chemical inputs detected. Monitor for pest pressure — biological controls may supplement protection."))
-    elif pesticides > 50000:
-        insights.append(("🧪", "High Chemical Input", "Elevated pesticide usage. Review application efficiency and consider integrated pest management (IPM)."))
-
-    return insights[:4]  # Cap at 4 cards
-
 # =============================================================================
 # ANIMATED HERO BACKGROUND BUILDERS
 # =============================================================================
@@ -659,44 +623,6 @@ header    { visibility: hidden; }
 }
 @keyframes barGrow { 0% { width: 0 !important; } }
 
-/* ── AI INSIGHT RECOMMENDATION CARDS ───────────────────────────────────────── */
-.ai-insight-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-top: 20px;
-}
-.ai-card {
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: 18px;
-    padding: 22px 20px;
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
-    animation: fadeSlideUp 0.6s ease forwards;
-    opacity: 0;
-}
-.ai-card:nth-child(1) { animation-delay: 0.05s; }
-.ai-card:nth-child(2) { animation-delay: 0.15s; }
-.ai-card:nth-child(3) { animation-delay: 0.25s; }
-.ai-card:nth-child(4) { animation-delay: 0.35s; }
-@keyframes fadeSlideUp {
-    0%   { opacity: 0; transform: translateY(18px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
-.ai-card:hover {
-    transform: translateY(-6px);
-    border-color: var(--glass-border-h);
-    box-shadow: 0 18px 44px -16px rgba(15,174,102,0.40);
-}
-.ai-card-icon  { font-size: 24px; margin-bottom: 10px; }
-.ai-card-title {
-    font-family: 'Plus Jakarta Sans', sans-serif;
-    font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 7px;
-}
-.ai-card-body  { color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
-
 /* ── WEATHER THEME BANNER ───────────────────────────────────────────────────── */
 .weather-banner {
     display: flex; align-items: center; gap: 14px;
@@ -711,6 +637,11 @@ header    { visibility: hidden; }
 .weather-banner-icon { font-size: 30px; flex-shrink: 0; }
 .weather-banner-title { font-weight: 700; color: var(--text-main); font-size: 15px; }
 .weather-banner-desc  { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
+
+@keyframes fadeSlideUp {
+    0%   { opacity: 0; transform: translateY(18px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
 
 /* ── PREDICTION RESULT CARD ─────────────────────────────────────────────────── */
 .result-card {
@@ -1134,7 +1065,7 @@ with right_col:
     )
 
 # =============================================================================
-# SECTION 4 — PREDICTION RESULT + GAUGE + WEATHER + AI INSIGHTS
+# SECTION 4 — PREDICTION RESULT + GAUGE + WEATHER
 # =============================================================================
 if st.session_state.get("show_result"):
     pred_value    = st.session_state.get("prediction", 0.0)
@@ -1213,41 +1144,6 @@ if st.session_state.get("show_result"):
             """,
             unsafe_allow_html=True,
         )
-
-    # ── FIX 4: AI Recommendation Cards — fully implemented (was only a comment stub)
-    st.markdown(
-        """
-        <div class="sec-head" style="margin-top:32px;">
-            <div class="sec-tag">Smart Recommendations</div>
-            <div class="sec-title">AI Agronomic Insights</div>
-            <div class="sec-desc">Contextual advice generated from your climate inputs and predicted yield outcome.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    ai_cards = get_ai_recommendations(
-        pred_crop,
-        pred_inputs.get("rainfall", 0),
-        pred_inputs.get("temperature", 25),
-        pred_inputs.get("pesticides", 0),
-        pred_value,
-    )
-
-    ai_cards_html = "".join(
-        f"""
-        <div class="ai-card">
-            <div class="ai-card-icon">{icon}</div>
-            <div class="ai-card-title">{title}</div>
-            <div class="ai-card-body">{body}</div>
-        </div>
-        """
-        for icon, title, body in ai_cards
-    )
-    st.markdown(
-        f'<div class="ai-insight-grid">{ai_cards_html}</div>',
-        unsafe_allow_html=True,
-    )
 
     # ==========================================================================
     # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS
@@ -1487,7 +1383,7 @@ st.markdown(
         <b>R² of {R2_SCORE}%</b> on a held-out test set.
         <br><br>
         <b>This version adds:</b> Plotly gauge charts · dynamic weather theme effects ·
-        per-theme climate particles · AI recommendation cards · animated KPI counters ·
+        per-theme climate particles · animated KPI counters ·
         glassmorphism design system · per-tree confidence intervals · what-if
         sensitivity explorer · session history with CSV export.
         <br><br>
