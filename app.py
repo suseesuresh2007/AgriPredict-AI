@@ -1045,21 +1045,21 @@ with left_col:
         if not MODEL_LOADED:
             st.error("Prediction unavailable — model artifacts are missing from this directory.")
         else:
-            with st.spinner("Running AI prediction model..."):
-    try:
-        area_encoded = area_encoder.transform([country])[0]
-        item_encoded = item_encoder.transform([crop])[0]
+             with st.spinner("Running AI prediction model..."):
+                  try:
+                         area_encoded = area_encoder.transform([country])[0]
+                         item_encoded = item_encoder.transform([crop])[0]
 
-        features = pd.DataFrame({
-            "Area": [area_encoded],
-            "Item": [item_encoded],
-            "Year": [year],
-            "average_rain_fall_mm_per_year": [rainfall],
-            "pesticides_tonnes": [pesticides],
-            "avg_temp": [temperature]
-        })
+                         features = pd.DataFrame({
+                         "Area": [area_encoded],
+                         "Item": [item_encoded],
+                         "Year": [year],
+                         "average_rain_fall_mm_per_year": [rainfall],
+                         "pesticides_tonnes": [pesticides],
+                         "avg_temp": [temperature]
+                       })
 
-        prediction = float(model.predict(features)[0])
+                        prediction = float(model.predict(features)[0])
 
     except Exception as e:
         st.error(f"Prediction failed: {e}")
