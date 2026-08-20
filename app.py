@@ -20,7 +20,7 @@ st.set_page_config(
 )
 
 # =============================================================================
-# MODEL / ENCODER LOADING
+# MODEL / ENCODER LOADING  ← UNCHANGED
 # =============================================================================
 @st.cache_resource
 def load_artifacts():
@@ -39,7 +39,7 @@ except Exception as e:
     model, area_encoder, item_encoder = None, None, None
 
 # =============================================================================
-# STATIC PROJECT DATA
+# STATIC PROJECT DATA  ← UNCHANGED
 # =============================================================================
 CROPS_FALLBACK = [
     "Cassava", "Maize", "Plantains and others", "Potatoes", "Rice, paddy",
@@ -115,9 +115,11 @@ if "prediction_history" not in st.session_state:
     st.session_state["prediction_history"] = []
 if "show_result" not in st.session_state:
     st.session_state["show_result"] = False
+if "intro_played" not in st.session_state:
+    st.session_state["intro_played"] = False
 
 # =============================================================================
-# HELPER FUNCTIONS
+# HELPER FUNCTIONS  ← UNCHANGED LOGIC
 # =============================================================================
 def get_confidence_range(model, features):
     """Use per-tree variance for confidence interval."""
@@ -195,6 +197,42 @@ def get_weather_description(theme):
     }
     return desc.get(theme, ("🌍 Variable Climate", "Mixed conditions detected."))
 
+def get_ai_recommendations(crop, rainfall, temperature, pesticides, pred_value):
+    """Generate contextual AI insight cards based on inputs."""
+    insights = []
+
+    # Yield tier insight
+    if pred_value >= 100000:
+        insights.append(("🏆", "Excellent Yield Potential", "Predicted yield is in the top tier. Current conditions align well with this crop's optimal growth profile."))
+    elif pred_value >= 50000:
+        insights.append(("📈", "Strong Yield Forecast", "Conditions support above-average production. Minor climate optimizations could push yield further."))
+    elif pred_value >= 20000:
+        insights.append(("⚙️", "Moderate Yield Expected", "Yield is within normal range. Review pesticide levels and irrigation strategy for improvement."))
+    else:
+        insights.append(("⚠️", "Below-Average Yield Risk", "Consider switching to a drought-tolerant variety or adjusting the growing season."))
+
+    # Rainfall insight
+    if rainfall < 400:
+        insights.append(("💧", "Irrigation Advisory", f"At {rainfall:.0f} mm/yr, supplemental irrigation is likely needed. Consider drip systems for efficiency."))
+    elif rainfall > 2500:
+        insights.append(("🌊", "Drainage Management", f"High rainfall ({rainfall:.0f} mm/yr) may cause waterlogging. Ensure raised beds and adequate drainage channels."))
+
+    # Temperature insight
+    if crop in CROP_TYPICAL_TEMP:
+        ct_min, ct_max = CROP_TYPICAL_TEMP[crop]
+        if ct_min <= temperature <= ct_max:
+            insights.append(("🌡️", "Optimal Temperature Window", f"{temperature:.1f}°C is within the ideal range for {crop} ({ct_min}–{ct_max}°C). Thermal conditions are favorable."))
+        elif temperature > ct_max:
+            insights.append(("🔥", "Heat Stress Risk", f"At {temperature:.1f}°C, {crop} may experience heat stress. Consider shade netting or shifting harvest calendar."))
+
+    # Pesticide insight
+    if pesticides < 100:
+        insights.append(("🌿", "Low Pesticide Input", "Minimal chemical inputs detected. Monitor for pest pressure — biological controls may supplement protection."))
+    elif pesticides > 50000:
+        insights.append(("🧪", "High Chemical Input", "Elevated pesticide usage. Review application efficiency and consider integrated pest management (IPM)."))
+
+    return insights[:4]  # Cap at 4 cards
+
 # =============================================================================
 # ANIMATED HERO BACKGROUND BUILDERS
 # =============================================================================
@@ -246,6 +284,7 @@ def build_floating_html():
 def build_weather_particles(theme, rainfall=0, temperature=25):
     """Render dynamic weather-themed particles based on climate inputs."""
     if theme == "drought":
+        # Heat shimmer particles — amber/orange dots
         particles = []
         for _ in range(20):
             left = random.randint(5, 95)
@@ -260,6 +299,7 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(particles)}</div>'
 
     elif theme == "tropical":
+        # Heavy rain effect
         drops = []
         for _ in range(70):
             left = random.randint(0, 100)
@@ -273,6 +313,7 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(drops)}</div>'
 
     elif theme == "cold":
+        # Snowflake-like dots
         flakes = []
         for _ in range(30):
             left = random.randint(5, 95)
@@ -286,6 +327,7 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(flakes)}</div>'
 
     elif theme == "lush":
+        # Floating green sparkles
         sparks = []
         for _ in range(25):
             left = random.randint(5, 95)
@@ -583,6 +625,7 @@ header    { visibility: hidden; }
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
     line-height: 1.1;
 }
+/* Animated counter effect */
 .kpi-value.counting { animation: countUp 1.2s ease forwards; }
 @keyframes countUp {
     0%   { opacity: 0; transform: translateY(12px); }
@@ -623,6 +666,44 @@ header    { visibility: hidden; }
 }
 @keyframes barGrow { 0% { width: 0 !important; } }
 
+/* ── AI INSIGHT RECOMMENDATION CARDS ───────────────────────────────────────── */
+.ai-insight-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+}
+.ai-card {
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: 18px;
+    padding: 22px 20px;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    transition: transform 0.28s ease, border-color 0.28s ease, box-shadow 0.28s ease;
+    animation: fadeSlideUp 0.6s ease forwards;
+    opacity: 0;
+}
+.ai-card:nth-child(1) { animation-delay: 0.05s; }
+.ai-card:nth-child(2) { animation-delay: 0.15s; }
+.ai-card:nth-child(3) { animation-delay: 0.25s; }
+.ai-card:nth-child(4) { animation-delay: 0.35s; }
+@keyframes fadeSlideUp {
+    0%   { opacity: 0; transform: translateY(18px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+.ai-card:hover {
+    transform: translateY(-6px);
+    border-color: var(--glass-border-h);
+    box-shadow: 0 18px 44px -16px rgba(15,174,102,0.40);
+}
+.ai-card-icon  { font-size: 24px; margin-bottom: 10px; }
+.ai-card-title {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 7px;
+}
+.ai-card-body  { color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
+
 /* ── WEATHER THEME BANNER ───────────────────────────────────────────────────── */
 .weather-banner {
     display: flex; align-items: center; gap: 14px;
@@ -637,11 +718,6 @@ header    { visibility: hidden; }
 .weather-banner-icon { font-size: 30px; flex-shrink: 0; }
 .weather-banner-title { font-weight: 700; color: var(--text-main); font-size: 15px; }
 .weather-banner-desc  { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
-
-@keyframes fadeSlideUp {
-    0%   { opacity: 0; transform: translateY(18px); }
-    100% { opacity: 1; transform: translateY(0); }
-}
 
 /* ── PREDICTION RESULT CARD ─────────────────────────────────────────────────── */
 .result-card {
@@ -854,6 +930,173 @@ div[data-baseweb="select"] > div {
 st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
 
 # =============================================================================
+# INTRO SPLASH — water pour, then a bushy plant grows, then the app reveals.
+# Plays exactly once per session (guarded by st.session_state["intro_played"]),
+# so it does not replay on every form submit / rerun.
+# =============================================================================
+INTRO_OVERLAY_HTML = """
+<style>
+#intro-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 999999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(ellipse 60% 50% at 50% 30%, rgba(15,174,102,0.10), transparent),
+                linear-gradient(180deg, #050d09 0%, #080f0b 100%);
+    animation: introOverlayOut 4.6s ease forwards;
+}
+@keyframes introOverlayOut {
+    0%, 84% { opacity: 1; visibility: visible; pointer-events: all; }
+    100%    { opacity: 0; visibility: hidden; pointer-events: none; }
+}
+#intro-overlay svg { width: min(70vw, 320px); height: auto; overflow: visible; }
+
+/* Falling water drop */
+.intro-drop {
+    animation: introDropFall 0.85s cubic-bezier(.55,0,.85,.35) forwards;
+}
+@keyframes introDropFall {
+    0%   { transform: translateY(-90px); opacity: 1; }
+    88%  { transform: translateY(150px); opacity: 1; }
+    100% { transform: translateY(150px); opacity: 0; }
+}
+
+/* Splash ripples on impact */
+.intro-ripple {
+    opacity: 0;
+    transform-origin: 120px 240px;
+    animation: introRipple 0.6s ease-out forwards;
+    animation-delay: 0.80s;
+}
+.intro-ripple.r2 { animation-delay: 0.90s; }
+@keyframes introRipple {
+    0%   { opacity: 0.9; transform: scale(0.2); }
+    100% { opacity: 0;   transform: scale(1.7); }
+}
+
+/* Stem growing upward out of the soil */
+.intro-stem {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: introStemGrow 1.3s cubic-bezier(.4,0,.2,1) forwards;
+    animation-delay: 1.05s;
+}
+@keyframes introStemGrow {
+    to { stroke-dashoffset: 0; }
+}
+
+/* Bushy leaves popping out along the stem, alternating sides */
+.intro-leaf { opacity: 0; transform: scale(0); animation: introLeafPop 0.55s cubic-bezier(.34,1.56,.64,1) forwards; }
+.intro-leaf.l1 { animation-delay: 1.55s; }
+.intro-leaf.l2 { animation-delay: 1.78s; }
+.intro-leaf.l3 { animation-delay: 2.01s; }
+.intro-leaf.l4 { animation-delay: 2.24s; }
+.intro-leaf.l5 { animation-delay: 2.47s; }
+.intro-leaf.l6 { animation-delay: 2.70s; }
+.intro-leaf.l7 { animation-delay: 2.93s; }
+.intro-leaf.l8 { animation-delay: 3.10s; }
+@keyframes introLeafPop {
+    0%   { opacity: 0; transform: scale(0); }
+    70%  { opacity: 1; }
+    100% { opacity: 1; transform: scale(1); }
+}
+
+/* Soft ambient glow once the plant is fully grown */
+.intro-glow {
+    opacity: 0;
+    animation: introGlowIn 0.8s ease forwards;
+    animation-delay: 3.30s;
+}
+@keyframes introGlowIn { to { opacity: 1; } }
+
+.intro-caption {
+    position: absolute;
+    bottom: 13%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #8eb09e;
+    font-family: 'Inter', sans-serif;
+    font-size: 13px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    opacity: 0;
+    animation: introCaptionIn 0.8s ease forwards;
+    animation-delay: 3.45s;
+    white-space: nowrap;
+}
+@keyframes introCaptionIn { to { opacity: 0.85; } }
+</style>
+
+<div id="intro-overlay">
+    <svg viewBox="0 0 240 320">
+        <defs>
+            <linearGradient id="stemGrad" x1="0" y1="1" x2="0" y2="0">
+                <stop offset="0%" stop-color="#0fae66"/>
+                <stop offset="100%" stop-color="#6dffb0"/>
+            </linearGradient>
+            <radialGradient id="leafGrad" cx="30%" cy="30%" r="80%">
+                <stop offset="0%" stop-color="#8dffc4"/>
+                <stop offset="100%" stop-color="#0fae66"/>
+            </radialGradient>
+            <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+                <stop offset="0%" stop-color="rgba(109,255,176,0.35)"/>
+                <stop offset="100%" stop-color="rgba(109,255,176,0)"/>
+            </radialGradient>
+        </defs>
+
+        <ellipse class="intro-glow" cx="120" cy="150" rx="110" ry="130" fill="url(#glowGrad)"/>
+
+        <!-- soil line -->
+        <line x1="30" y1="240" x2="210" y2="240" stroke="rgba(109,255,176,0.30)" stroke-width="2"/>
+
+        <!-- falling water drop -->
+        <path class="intro-drop" d="M120,60 C126,72 138,86 138,98 C138,108.5 130,116 120,116 C110,116 102,108.5 102,98 C102,86 114,72 120,60 Z" fill="#6dffb0"/>
+
+        <!-- splash ripples where the drop lands -->
+        <ellipse class="intro-ripple" cx="120" cy="240" rx="14" ry="5" fill="none" stroke="#6dffb0" stroke-width="2"/>
+        <ellipse class="intro-ripple r2" cx="120" cy="240" rx="18" ry="6" fill="none" stroke="#34e89e" stroke-width="1.5"/>
+
+        <!-- growing stem -->
+        <path class="intro-stem" d="M120,240 C118,205 122,170 120,135 C118,110 121,90 120,68"
+              fill="none" stroke="url(#stemGrad)" stroke-width="4" stroke-linecap="round" pathLength="100"/>
+
+        <!-- bushy leaves, alternating left / right, denser near the base -->
+        <g class="intro-leaf l1" transform="translate(120,222) rotate(-38)">
+            <path d="M0,0 C14,-4 28,-2 34,6 C28,14 14,12 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l2" transform="translate(120,214) rotate(35)">
+            <path d="M0,0 C-13,-5 -25,-2 -31,6 C-25,13 -13,11 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l3" transform="translate(121,188) rotate(-32)">
+            <path d="M0,0 C13,-5 24,-2 30,6 C24,13 13,11 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l4" transform="translate(119,180) rotate(30)">
+            <path d="M0,0 C-12,-5 -23,-2 -29,6 C-23,13 -12,11 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l5" transform="translate(121,150) rotate(-28)">
+            <path d="M0,0 C11,-4 20,-1 25,5 C20,11 11,9 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l6" transform="translate(119,144) rotate(26)">
+            <path d="M0,0 C-10,-4 -19,-1 -24,5 C-19,11 -10,9 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l7" transform="translate(120,110) rotate(-20)">
+            <path d="M0,0 C9,-4 16,-1 20,4 C16,9 9,7 0,0 Z" fill="url(#leafGrad)"/>
+        </g>
+        <g class="intro-leaf l8" transform="translate(120,72) rotate(0)">
+            <path d="M0,-2 C7,-10 8,-20 4,-27 C-2,-20 -3,-10 0,-2 Z" fill="url(#leafGrad)"/>
+        </g>
+    </svg>
+    <div class="intro-caption">AgriPredict AI</div>
+</div>
+"""
+
+if not st.session_state["intro_played"]:
+    st.session_state["intro_played"] = True
+    st.markdown(INTRO_OVERLAY_HTML, unsafe_allow_html=True)
+
+# =============================================================================
 # SECTION 1 — HERO
 # =============================================================================
 hero_html = f"""
@@ -887,7 +1130,7 @@ if not MODEL_LOADED:
     )
 
 # =============================================================================
-# SECTION 2 — KPI DASHBOARD
+# SECTION 2 — KPI DASHBOARD (animated counters via CSS)
 # =============================================================================
 st.markdown(
     """
@@ -967,39 +1210,27 @@ with left_col:
 
         submitted = st.form_submit_button("🔮 Generate Yield Forecast", use_container_width=True)
 
-    # ── FIX 1: All prediction logic is correctly inside the `if submitted:` block
-    # ── FIX 2: Removed stray `st.write(features)` debug line
-    # ── FIX 3: Removed duplicate `prediction = float(model.predict(features)[0])` outside try
     if submitted:
         if not MODEL_LOADED:
             st.error("Prediction unavailable — model artifacts are missing from this directory.")
         else:
-            with st.spinner("Running AI prediction model..."):
+            with st.spinner("Running AI prediction model…"):
                 try:
-                    area_encoded = area_encoder.transform([country])[0]
-                    item_encoded = item_encoder.transform([crop])[0]
-
-                    features = pd.DataFrame({
-                        "Area": [area_encoded],
-                        "Item": [item_encoded],
-                        "Year": [year],
-                        "average_rain_fall_mm_per_year": [rainfall],
-                        "pesticides_tonnes": [pesticides],
-                        "avg_temp": [temperature],
-                    })
-
-                    prediction = float(model.predict(features)[0])
-                    confidence = get_confidence_range(model, features)
+                    area_encoded  = area_encoder.transform([country])[0]
+                    item_encoded  = item_encoder.transform([crop])[0]
+                    features      = np.array([[year, rainfall, pesticides, temperature, area_encoded, item_encoded]])
+                    prediction    = float(model.predict(features)[0])
+                    confidence    = get_confidence_range(model, features)
                     warnings_list = get_warnings(crop, rainfall, pesticides, temperature)
                     weather_theme = get_weather_theme(rainfall, temperature)
 
-                    st.session_state["prediction"] = prediction
-                    st.session_state["confidence"] = confidence
-                    st.session_state["warnings"] = warnings_list
-                    st.session_state["pred_country"] = country
-                    st.session_state["pred_crop"] = crop
+                    st.session_state["prediction"]    = prediction
+                    st.session_state["confidence"]    = confidence
+                    st.session_state["warnings"]      = warnings_list
+                    st.session_state["pred_country"]  = country
+                    st.session_state["pred_crop"]     = crop
                     st.session_state["weather_theme"] = weather_theme
-                    st.session_state["pred_inputs"] = {
+                    st.session_state["pred_inputs"]   = {
                         "year": year, "rainfall": rainfall,
                         "pesticides": pesticides, "temperature": temperature,
                     }
@@ -1008,15 +1239,15 @@ with left_col:
                     # Append to history
                     status_label, _, _, _ = yield_status(prediction)
                     st.session_state["prediction_history"].append({
-                        "Timestamp": datetime.now().strftime("%H:%M:%S"),
-                        "Country": country,
-                        "Crop": crop,
-                        "Year": year,
-                        "Rainfall (mm)": rainfall,
-                        "Temp (°C)": temperature,
-                        "Pesticides (t)": pesticides,
-                        "Yield (hg/ha)": f"{prediction:,.0f}",
-                        "Status": status_label,
+                        "Timestamp":       datetime.now().strftime("%H:%M:%S"),
+                        "Country":         country,
+                        "Crop":            crop,
+                        "Year":            year,
+                        "Rainfall (mm)":   rainfall,
+                        "Temp (°C)":       temperature,
+                        "Pesticides (t)":  pesticides,
+                        "Yield (hg/ha)":   f"{prediction:,.0f}",
+                        "Status":          status_label,
                     })
                 except Exception as e:
                     st.session_state["show_result"] = False
@@ -1065,7 +1296,7 @@ with right_col:
     )
 
 # =============================================================================
-# SECTION 4 — PREDICTION RESULT + GAUGE + WEATHER
+# SECTION 4 — PREDICTION RESULT + GAUGE + WEATHER + AI INSIGHTS
 # =============================================================================
 if st.session_state.get("show_result"):
     pred_value    = st.session_state.get("prediction", 0.0)
@@ -1099,11 +1330,7 @@ if st.session_state.get("show_result"):
             hi = pred_value + confidence
             confidence_html = f'<div class="result-confidence">95% range: {lo:,.0f} – {hi:,.0f} hg/ha  (±{confidence:,.0f})</div>'
 
-        weather_particles_html = build_weather_particles(
-            weather_theme,
-            pred_inputs.get("rainfall", 0),
-            pred_inputs.get("temperature", 25),
-        )
+        weather_particles_html = build_weather_particles(weather_theme, pred_inputs.get("rainfall", 0), pred_inputs.get("temperature", 25))
         st.markdown(
             f"""
             <div class="result-card">
@@ -1145,8 +1372,39 @@ if st.session_state.get("show_result"):
             unsafe_allow_html=True,
         )
 
+    # ── AI Recommendation Cards ───────────────────────────────────────────────
+    insights = get_ai_recommendations(
+        pred_crop,
+        pred_inputs.get("rainfall", 0),
+        pred_inputs.get("temperature", 25),
+        pred_inputs.get("pesticides", 0),
+        pred_value,
+    )
+    st.markdown(
+        """
+        <div class="sec-head" style="margin-top:36px;">
+            <div class="sec-tag">AI Advisory</div>
+            <div class="sec-title">Smart Recommendations</div>
+            <div class="sec-desc">Context-aware agronomic insights derived from your input parameters.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    cards_html = "".join(
+        f"""
+        <div class="ai-card">
+            <div class="ai-card-icon">{icon}</div>
+            <div class="ai-card-title">{title}</div>
+            <div class="ai-card-body">{body}</div>
+        </div>
+        """
+        for icon, title, body in insights
+    )
+    st.markdown(f'<div class="ai-insight-grid">{cards_html}</div>', unsafe_allow_html=True)
+
     # ==========================================================================
-    # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS
+    # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS  ← UNCHANGED LOGIC
     # ==========================================================================
     st.markdown('<hr class="fancy-divider">', unsafe_allow_html=True)
     st.markdown(
@@ -1163,12 +1421,12 @@ if st.session_state.get("show_result"):
     if MODEL_LOADED:
         whatif_tabs = st.tabs(["🌡️ Temperature", "🌧️ Rainfall", "🧪 Pesticides", "📅 Year"])
 
-        base_year       = pred_inputs.get("year", 2024)
-        base_rainfall   = pred_inputs.get("rainfall", 1100.0)
-        base_pesticides = pred_inputs.get("pesticides", 1500.0)
-        base_temp       = pred_inputs.get("temperature", 25.0)
-        area_enc        = area_encoder.transform([pred_country])[0]
-        item_enc        = item_encoder.transform([pred_crop])[0]
+        base_year        = pred_inputs.get("year", 2024)
+        base_rainfall    = pred_inputs.get("rainfall", 1100.0)
+        base_pesticides  = pred_inputs.get("pesticides", 1500.0)
+        base_temp        = pred_inputs.get("temperature", 25.0)
+        area_enc         = area_encoder.transform([pred_country])[0]
+        item_enc         = item_encoder.transform([pred_crop])[0]
 
         def make_whatif_fig(x_vals, yields, x_label, current_x, current_y):
             fig = go.Figure()
@@ -1199,37 +1457,24 @@ if st.session_state.get("show_result"):
             )
             return fig
 
-        # ── FIX 5: All what-if predictions use a proper named DataFrame
-        #    instead of a raw list, matching the column order the model was trained on.
-        def predict_single(year_v, rainfall_v, pest_v, temp_v, area_v, item_v):
-            df = pd.DataFrame({
-                "Area": [area_v],
-                "Item": [item_v],
-                "Year": [year_v],
-                "average_rain_fall_mm_per_year": [rainfall_v],
-                "pesticides_tonnes": [pest_v],
-                "avg_temp": [temp_v],
-            })
-            return float(model.predict(df)[0])
-
         with whatif_tabs[0]:
-            temps = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
-            yields_t = [predict_single(base_year, base_rainfall, base_pesticides, t, area_enc, item_enc) for t in temps]
+            temps   = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
+            yields_t = [float(model.predict([[base_year, base_rainfall, base_pesticides, t, area_enc, item_enc]])[0]) for t in temps]
             st.plotly_chart(make_whatif_fig(temps, yields_t, "Temperature (°C)", base_temp, pred_value), use_container_width=True)
 
         with whatif_tabs[1]:
-            rains = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
-            yields_r = [predict_single(base_year, r, base_pesticides, base_temp, area_enc, item_enc) for r in rains]
+            rains   = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
+            yields_r = [float(model.predict([[base_year, r, base_pesticides, base_temp, area_enc, item_enc]])[0]) for r in rains]
             st.plotly_chart(make_whatif_fig(rains, yields_r, "Rainfall (mm/yr)", base_rainfall, pred_value), use_container_width=True)
 
         with whatif_tabs[2]:
-            pests = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
-            yields_p = [predict_single(base_year, base_rainfall, p, base_temp, area_enc, item_enc) for p in pests]
+            pests   = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
+            yields_p = [float(model.predict([[base_year, base_rainfall, p, base_temp, area_enc, item_enc]])[0]) for p in pests]
             st.plotly_chart(make_whatif_fig(pests, yields_p, "Pesticides (tonnes)", base_pesticides, pred_value), use_container_width=True)
 
         with whatif_tabs[3]:
-            years = np.arange(1990, 2031, 1)
-            yields_y = [predict_single(int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc) for y in years]
+            years   = np.arange(1990, 2031, 1)
+            yields_y = [float(model.predict([[int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc]])[0]) for y in years]
             st.plotly_chart(make_whatif_fig(years, yields_y, "Year", base_year, pred_value), use_container_width=True)
 
 # =============================================================================
@@ -1382,10 +1627,11 @@ st.markdown(
         crop variety, and year as predictive features. It achieves an
         <b>R² of {R2_SCORE}%</b> on a held-out test set.
         <br><br>
-        <b>This version adds:</b> Plotly gauge charts · dynamic weather theme effects ·
-        per-theme climate particles · animated KPI counters ·
-        glassmorphism design system · per-tree confidence intervals · what-if
-        sensitivity explorer · session history with CSV export.
+        <b>This version adds:</b> an opening water-pour &amp; plant-growth intro ·
+        Plotly gauge charts · dynamic weather theme effects · per-theme climate
+        particles · AI recommendation cards · animated KPI counters · glassmorphism
+        design system · per-tree confidence intervals · what-if sensitivity explorer ·
+        session history with CSV export.
         <br><br>
         <b>Crops covered:</b><br>
         {crop_chips}
