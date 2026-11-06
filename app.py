@@ -4,10 +4,27 @@ import numpy as np
 import joblib
 import random
 import plotly.graph_objects as go
-import plotly.express as px
 from datetime import datetime
 import io
 import csv
+
+# =============================================================================
+# HTML RENDER FIX
+# Streamlit's markdown treats blank / whitespace-only lines as the end of an
+# HTML block and then renders indented lines as a code block. This wrapper
+# strips indentation and blank lines from every HTML snippet so cards, the
+# intro SVG and the result card always render correctly.
+# =============================================================================
+_st_markdown = st.markdown
+
+
+def _clean_markdown(body, *args, **kwargs):
+    if kwargs.get("unsafe_allow_html"):
+        body = "\n".join(l.strip() for l in str(body).splitlines() if l.strip())
+    return _st_markdown(body, *args, **kwargs)
+
+
+st.markdown = _clean_markdown
 
 # =============================================================================
 # PAGE CONFIG
@@ -20,7 +37,7 @@ st.set_page_config(
 )
 
 # =============================================================================
-# MODEL / ENCODER LOADING  ← UNCHANGED
+# MODEL / ENCODER LOADING
 # =============================================================================
 @st.cache_resource
 def load_artifacts():
@@ -39,7 +56,7 @@ except Exception as e:
     model, area_encoder, item_encoder = None, None, None
 
 # =============================================================================
-# STATIC PROJECT DATA  ← UNCHANGED
+# STATIC PROJECT DATA
 # =============================================================================
 CROPS_FALLBACK = [
     "Cassava", "Maize", "Plantains and others", "Potatoes", "Rice, paddy",
@@ -119,13 +136,13 @@ if "intro_played" not in st.session_state:
     st.session_state["intro_played"] = False
 
 # =============================================================================
-# HELPER FUNCTIONS  ← UNCHANGED LOGIC
+# HELPER FUNCTIONS
 # =============================================================================
 def get_confidence_range(model, features):
-    """Use per-tree variance for confidence interval."""
+    """Use per-tree spread for a ~95% interval (1.96 x std dev)."""
     try:
         preds = np.array([tree.predict(features)[0] for tree in model.estimators_])
-        return float(np.std(preds))
+        return float(1.96 * np.std(preds))
     except Exception:
         return None
 
@@ -284,7 +301,6 @@ def build_floating_html():
 def build_weather_particles(theme, rainfall=0, temperature=25):
     """Render dynamic weather-themed particles based on climate inputs."""
     if theme == "drought":
-        # Heat shimmer particles — amber/orange dots
         particles = []
         for _ in range(20):
             left = random.randint(5, 95)
@@ -299,7 +315,6 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(particles)}</div>'
 
     elif theme == "tropical":
-        # Heavy rain effect
         drops = []
         for _ in range(70):
             left = random.randint(0, 100)
@@ -313,7 +328,6 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(drops)}</div>'
 
     elif theme == "cold":
-        # Snowflake-like dots
         flakes = []
         for _ in range(30):
             left = random.randint(5, 95)
@@ -327,7 +341,6 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
         return f'<div class="weather-layer">{"".join(flakes)}</div>'
 
     elif theme == "lush":
-        # Floating green sparkles
         sparks = []
         for _ in range(25):
             left = random.randint(5, 95)
@@ -347,7 +360,7 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
 # PLOTLY GAUGE CHART
 # =============================================================================
 def make_gauge_chart(value, max_val=200000):
-    """Premium gauge chart for yield display with animated needle feel."""
+    """Premium gauge chart for yield display."""
     pct = min(value / max_val, 1.0)
     if pct < 0.2:
         gauge_color = "#ff6b6b"
@@ -419,7 +432,6 @@ def make_gauge_chart(value, max_val=200000):
 CUSTOM_CSS = """
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800;900&display=swap');
 
-/* ── DESIGN TOKENS ─────────────────────────────────────────────────────────── */
 :root {
     --bg-void:       #050d09;
     --bg-deep:       #080f0b;
@@ -443,7 +455,6 @@ CUSTOM_CSS = """
     --shadow-card:   0 24px 60px -20px rgba(0,0,0,0.6);
 }
 
-/* ── GLOBAL RESETS ──────────────────────────────────────────────────────────── */
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif !important;
     color: var(--text-main);
@@ -453,7 +464,6 @@ footer    { visibility: hidden; }
 header    { visibility: hidden; }
 [data-testid="stToolbar"] { visibility: hidden; }
 
-/* Background */
 .stApp {
     background:
         radial-gradient(ellipse 60% 40% at 10% 5%,  rgba(15,174,102,0.14), transparent),
@@ -463,12 +473,10 @@ header    { visibility: hidden; }
     min-height: 100vh;
 }
 
-/* Scrollbar */
 ::-webkit-scrollbar       { width: 8px; }
 ::-webkit-scrollbar-track { background: var(--bg-void); }
 ::-webkit-scrollbar-thumb { background: linear-gradient(180deg, var(--emerald), var(--forest)); border-radius: 8px; }
 
-/* ── HERO ───────────────────────────────────────────────────────────────────── */
 .hero-wrap {
     position: relative;
     overflow: hidden;
@@ -486,7 +494,6 @@ header    { visibility: hidden; }
     .hero-desc  { font-size: 13.5px !important; }
 }
 
-/* Rain */
 .rain-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .raindrop {
     position: absolute; top: -30px; width: 1.5px;
@@ -499,7 +506,6 @@ header    { visibility: hidden; }
     100% { transform: translateY(640px); opacity: 0; }
 }
 
-/* Floating icons */
 .float-layer    { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .floating-icon  {
     position: absolute; filter: drop-shadow(0 0 7px rgba(109,255,176,0.30));
@@ -512,7 +518,6 @@ header    { visibility: hidden; }
     100% { transform: translateY(0px) rotate(0deg); }
 }
 
-/* Weather particles */
 .weather-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 1; }
 .weather-particle { position: absolute; border-radius: 50%; animation-iteration-count: infinite; }
 .drought-particle {
@@ -548,7 +553,6 @@ header    { visibility: hidden; }
     40%     { transform: translateY(-20px) scale(1.6); opacity: 0; }
 }
 
-/* Hero text */
 .hero-content { position: relative; z-index: 2; text-align: center; }
 .hero-eyebrow {
     display: inline-block; padding: 6px 20px; border-radius: 999px;
@@ -587,7 +591,6 @@ header    { visibility: hidden; }
     background: rgba(255,255,255,0.025); letter-spacing: 0.01em;
 }
 
-/* ── SECTION HEADERS ────────────────────────────────────────────────────────── */
 .sec-head { margin: 52px 0 24px; }
 .sec-tag  {
     color: var(--neon); font-size: 12px; font-weight: 700;
@@ -599,7 +602,6 @@ header    { visibility: hidden; }
 }
 .sec-desc { color: var(--text-dim); font-size: 14.5px; line-height: 1.55; }
 
-/* ── KPI CARDS ──────────────────────────────────────────────────────────────── */
 .kpi-card {
     background: var(--glass);
     border: 1px solid var(--glass-border);
@@ -625,7 +627,6 @@ header    { visibility: hidden; }
     -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
     line-height: 1.1;
 }
-/* Animated counter effect */
 .kpi-value.counting { animation: countUp 1.2s ease forwards; }
 @keyframes countUp {
     0%   { opacity: 0; transform: translateY(12px); }
@@ -636,7 +637,6 @@ header    { visibility: hidden; }
     margin-top: 5px; letter-spacing: 0.03em;
 }
 
-/* ── INSIGHT PANEL ──────────────────────────────────────────────────────────── */
 .insight-card {
     background: var(--glass);
     border: 1px solid var(--glass-border);
@@ -666,7 +666,6 @@ header    { visibility: hidden; }
 }
 @keyframes barGrow { 0% { width: 0 !important; } }
 
-/* ── AI INSIGHT RECOMMENDATION CARDS ───────────────────────────────────────── */
 .ai-insight-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -704,7 +703,6 @@ header    { visibility: hidden; }
 }
 .ai-card-body  { color: var(--text-dim); font-size: 12.5px; line-height: 1.6; }
 
-/* ── WEATHER THEME BANNER ───────────────────────────────────────────────────── */
 .weather-banner {
     display: flex; align-items: center; gap: 14px;
     background: var(--glass);
@@ -719,7 +717,6 @@ header    { visibility: hidden; }
 .weather-banner-title { font-weight: 700; color: var(--text-main); font-size: 15px; }
 .weather-banner-desc  { color: var(--text-dim); font-size: 12.5px; margin-top: 2px; }
 
-/* ── PREDICTION RESULT CARD ─────────────────────────────────────────────────── */
 .result-card {
     position: relative; border-radius: 24px; padding: 38px 30px;
     text-align: center;
@@ -727,6 +724,7 @@ header    { visibility: hidden; }
     border: 1px solid rgba(109,255,176,0.38);
     animation: fadeInScale 0.65s cubic-bezier(.4,0,.2,1) forwards, glowPulse 3s ease-in-out infinite;
     box-shadow: var(--shadow-card);
+    overflow: hidden;
 }
 @keyframes fadeInScale {
     0%   { opacity: 0; transform: scale(0.88); }
@@ -760,7 +758,6 @@ header    { visibility: hidden; }
 .status-high      { background: rgba(109,255,176,0.12); color: var(--neon); border: 1px solid rgba(109,255,176,0.38); }
 .status-excellent { background: rgba(52,232,158,0.16);  color: #7dffc0; border: 1px solid rgba(52,232,158,0.48); }
 
-/* ── WARNING BOX ────────────────────────────────────────────────────────────── */
 .warn-box {
     background: var(--warn-bg);
     border: 1px solid var(--warn-border);
@@ -772,7 +769,6 @@ header    { visibility: hidden; }
     line-height: 1.7;
 }
 
-/* ── MODEL METRIC CARDS ─────────────────────────────────────────────────────── */
 .metric-card {
     background: var(--glass);
     border: 1px solid var(--glass-border);
@@ -790,7 +786,6 @@ header    { visibility: hidden; }
 .metric-title { color: var(--text-dim); font-size: 12.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 7px; }
 .metric-num   { font-family: 'Plus Jakarta Sans', sans-serif; font-size: 28px; font-weight: 800; color: var(--neon); }
 
-/* ── HISTORY TABLE ──────────────────────────────────────────────────────────── */
 .history-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .history-table th {
     background: rgba(109,255,176,0.06); color: var(--neon);
@@ -806,7 +801,6 @@ header    { visibility: hidden; }
 .history-table tr:last-child td { border-bottom: none; }
 .history-table tr:hover td { background: rgba(109,255,176,0.035); }
 
-/* ── ABOUT CARD ─────────────────────────────────────────────────────────────── */
 .about-card {
     background: var(--glass);
     border: 1px solid var(--glass-border);
@@ -823,7 +817,6 @@ header    { visibility: hidden; }
     color: var(--neon); font-size: 12px; font-weight: 600;
 }
 
-/* ── GLASS WRAPPER ──────────────────────────────────────────────────────────── */
 .glass-card {
     background: var(--glass);
     border: 1px solid var(--glass-border);
@@ -833,7 +826,6 @@ header    { visibility: hidden; }
     padding: 26px 24px;
 }
 
-/* ── STREAMLIT FORM CONTROLS ────────────────────────────────────────────────── */
 [data-testid="stForm"] {
     background: var(--glass) !important;
     border: 1px solid var(--glass-border) !important;
@@ -870,7 +862,6 @@ div[data-baseweb="select"] > div {
     box-shadow: 0 20px 40px -10px rgba(15,174,102,0.85) !important;
 }
 
-/* ── LOADING ANIMATION ──────────────────────────────────────────────────────── */
 .loading-wrap {
     display: flex; align-items: center; gap: 14px;
     padding: 20px 24px;
@@ -893,7 +884,6 @@ div[data-baseweb="select"] > div {
     40%         { transform: scale(1.2); opacity: 1;   }
 }
 
-/* ── TABS ────────────────────────────────────────────────────────────────────── */
 .stTabs [data-baseweb="tab-list"] {
     background: var(--glass) !important;
     border-radius: 14px !important;
@@ -911,14 +901,12 @@ div[data-baseweb="select"] > div {
     color: var(--neon) !important;
 }
 
-/* ── FOOTER ─────────────────────────────────────────────────────────────────── */
 .app-footer {
     text-align: center; color: var(--text-dim);
     font-size: 12px; padding: 36px 0 12px; opacity: 0.6;
     letter-spacing: 0.04em;
 }
 
-/* ── DIVIDER ─────────────────────────────────────────────────────────────────── */
 .fancy-divider {
     border: none;
     height: 1px;
@@ -931,8 +919,7 @@ st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
 
 # =============================================================================
 # INTRO SPLASH — water pour, then a bushy plant grows, then the app reveals.
-# Plays exactly once per session (guarded by st.session_state["intro_played"]),
-# so it does not replay on every form submit / rerun.
+# Plays once per session.
 # =============================================================================
 INTRO_OVERLAY_HTML = """
 <style>
@@ -952,8 +939,6 @@ INTRO_OVERLAY_HTML = """
     100%    { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 #intro-overlay svg { width: min(70vw, 320px); height: auto; overflow: visible; }
-
-/* Falling water drop */
 .intro-drop {
     animation: introDropFall 0.85s cubic-bezier(.55,0,.85,.35) forwards;
 }
@@ -962,8 +947,6 @@ INTRO_OVERLAY_HTML = """
     88%  { transform: translateY(150px); opacity: 1; }
     100% { transform: translateY(150px); opacity: 0; }
 }
-
-/* Splash ripples on impact */
 .intro-ripple {
     opacity: 0;
     transform-origin: 120px 240px;
@@ -975,8 +958,6 @@ INTRO_OVERLAY_HTML = """
     0%   { opacity: 0.9; transform: scale(0.2); }
     100% { opacity: 0;   transform: scale(1.7); }
 }
-
-/* Stem growing upward out of the soil */
 .intro-stem {
     stroke-dasharray: 100;
     stroke-dashoffset: 100;
@@ -986,8 +967,6 @@ INTRO_OVERLAY_HTML = """
 @keyframes introStemGrow {
     to { stroke-dashoffset: 0; }
 }
-
-/* Bushy leaves popping out along the stem, alternating sides */
 .intro-leaf { opacity: 0; transform: scale(0); animation: introLeafPop 0.55s cubic-bezier(.34,1.56,.64,1) forwards; }
 .intro-leaf.l1 { animation-delay: 1.55s; }
 .intro-leaf.l2 { animation-delay: 1.78s; }
@@ -1002,15 +981,12 @@ INTRO_OVERLAY_HTML = """
     70%  { opacity: 1; }
     100% { opacity: 1; transform: scale(1); }
 }
-
-/* Soft ambient glow once the plant is fully grown */
 .intro-glow {
     opacity: 0;
     animation: introGlowIn 0.8s ease forwards;
     animation-delay: 3.30s;
 }
 @keyframes introGlowIn { to { opacity: 1; } }
-
 .intro-caption {
     position: absolute;
     bottom: 13%;
@@ -1028,67 +1004,38 @@ INTRO_OVERLAY_HTML = """
 }
 @keyframes introCaptionIn { to { opacity: 0.85; } }
 </style>
-
 <div id="intro-overlay">
-    <svg viewBox="0 0 240 320">
-        <defs>
-            <linearGradient id="stemGrad" x1="0" y1="1" x2="0" y2="0">
-                <stop offset="0%" stop-color="#0fae66"/>
-                <stop offset="100%" stop-color="#6dffb0"/>
-            </linearGradient>
-            <radialGradient id="leafGrad" cx="30%" cy="30%" r="80%">
-                <stop offset="0%" stop-color="#8dffc4"/>
-                <stop offset="100%" stop-color="#0fae66"/>
-            </radialGradient>
-            <radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stop-color="rgba(109,255,176,0.35)"/>
-                <stop offset="100%" stop-color="rgba(109,255,176,0)"/>
-            </radialGradient>
-        </defs>
-
-        <ellipse class="intro-glow" cx="120" cy="150" rx="110" ry="130" fill="url(#glowGrad)"/>
-
-        <!-- soil line -->
-        <line x1="30" y1="240" x2="210" y2="240" stroke="rgba(109,255,176,0.30)" stroke-width="2"/>
-
-        <!-- falling water drop -->
-        <path class="intro-drop" d="M120,60 C126,72 138,86 138,98 C138,108.5 130,116 120,116 C110,116 102,108.5 102,98 C102,86 114,72 120,60 Z" fill="#6dffb0"/>
-
-        <!-- splash ripples where the drop lands -->
-        <ellipse class="intro-ripple" cx="120" cy="240" rx="14" ry="5" fill="none" stroke="#6dffb0" stroke-width="2"/>
-        <ellipse class="intro-ripple r2" cx="120" cy="240" rx="18" ry="6" fill="none" stroke="#34e89e" stroke-width="1.5"/>
-
-        <!-- growing stem -->
-        <path class="intro-stem" d="M120,240 C118,205 122,170 120,135 C118,110 121,90 120,68"
-              fill="none" stroke="url(#stemGrad)" stroke-width="4" stroke-linecap="round" pathLength="100"/>
-
-        <!-- bushy leaves, alternating left / right, denser near the base -->
-        <g class="intro-leaf l1" transform="translate(120,222) rotate(-38)">
-            <path d="M0,0 C14,-4 28,-2 34,6 C28,14 14,12 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l2" transform="translate(120,214) rotate(35)">
-            <path d="M0,0 C-13,-5 -25,-2 -31,6 C-25,13 -13,11 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l3" transform="translate(121,188) rotate(-32)">
-            <path d="M0,0 C13,-5 24,-2 30,6 C24,13 13,11 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l4" transform="translate(119,180) rotate(30)">
-            <path d="M0,0 C-12,-5 -23,-2 -29,6 C-23,13 -12,11 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l5" transform="translate(121,150) rotate(-28)">
-            <path d="M0,0 C11,-4 20,-1 25,5 C20,11 11,9 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l6" transform="translate(119,144) rotate(26)">
-            <path d="M0,0 C-10,-4 -19,-1 -24,5 C-19,11 -10,9 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l7" transform="translate(120,110) rotate(-20)">
-            <path d="M0,0 C9,-4 16,-1 20,4 C16,9 9,7 0,0 Z" fill="url(#leafGrad)"/>
-        </g>
-        <g class="intro-leaf l8" transform="translate(120,72) rotate(0)">
-            <path d="M0,-2 C7,-10 8,-20 4,-27 C-2,-20 -3,-10 0,-2 Z" fill="url(#leafGrad)"/>
-        </g>
-    </svg>
-    <div class="intro-caption">AgriPredict AI</div>
+<svg viewBox="0 0 240 320">
+<defs>
+<linearGradient id="stemGrad" x1="0" y1="1" x2="0" y2="0">
+<stop offset="0%" stop-color="#0fae66"/>
+<stop offset="100%" stop-color="#6dffb0"/>
+</linearGradient>
+<radialGradient id="leafGrad" cx="30%" cy="30%" r="80%">
+<stop offset="0%" stop-color="#8dffc4"/>
+<stop offset="100%" stop-color="#0fae66"/>
+</radialGradient>
+<radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
+<stop offset="0%" stop-color="rgba(109,255,176,0.35)"/>
+<stop offset="100%" stop-color="rgba(109,255,176,0)"/>
+</radialGradient>
+</defs>
+<ellipse class="intro-glow" cx="120" cy="150" rx="110" ry="130" fill="url(#glowGrad)"/>
+<line x1="30" y1="240" x2="210" y2="240" stroke="rgba(109,255,176,0.30)" stroke-width="2"/>
+<path class="intro-drop" d="M120,60 C126,72 138,86 138,98 C138,108.5 130,116 120,116 C110,116 102,108.5 102,98 C102,86 114,72 120,60 Z" fill="#6dffb0"/>
+<ellipse class="intro-ripple" cx="120" cy="240" rx="14" ry="5" fill="none" stroke="#6dffb0" stroke-width="2"/>
+<ellipse class="intro-ripple r2" cx="120" cy="240" rx="18" ry="6" fill="none" stroke="#34e89e" stroke-width="1.5"/>
+<path class="intro-stem" d="M120,240 C118,205 122,170 120,135 C118,110 121,90 120,68" fill="none" stroke="url(#stemGrad)" stroke-width="4" stroke-linecap="round" pathLength="100"/>
+<g class="intro-leaf l1" transform="translate(120,222) rotate(-38)"><path d="M0,0 C14,-4 28,-2 34,6 C28,14 14,12 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l2" transform="translate(120,214) rotate(35)"><path d="M0,0 C-13,-5 -25,-2 -31,6 C-25,13 -13,11 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l3" transform="translate(121,188) rotate(-32)"><path d="M0,0 C13,-5 24,-2 30,6 C24,13 13,11 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l4" transform="translate(119,180) rotate(30)"><path d="M0,0 C-12,-5 -23,-2 -29,6 C-23,13 -12,11 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l5" transform="translate(121,150) rotate(-28)"><path d="M0,0 C11,-4 20,-1 25,5 C20,11 11,9 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l6" transform="translate(119,144) rotate(26)"><path d="M0,0 C-10,-4 -19,-1 -24,5 C-19,11 -10,9 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l7" transform="translate(120,110) rotate(-20)"><path d="M0,0 C9,-4 16,-1 20,4 C16,9 9,7 0,0 Z" fill="url(#leafGrad)"/></g>
+<g class="intro-leaf l8" transform="translate(120,72) rotate(0)"><path d="M0,-2 C7,-10 8,-20 4,-27 C-2,-20 -3,-10 0,-2 Z" fill="url(#leafGrad)"/></g>
+</svg>
+<div class="intro-caption">AgriPredict AI</div>
 </div>
 """
 
@@ -1121,7 +1068,6 @@ hero_html = f"""
 """
 st.markdown(hero_html, unsafe_allow_html=True)
 
-# Model loading warning
 if not MODEL_LOADED:
     st.warning(
         "⚠️ Model artifacts not found. Place `crop_yield_model.pkl`, "
@@ -1130,7 +1076,7 @@ if not MODEL_LOADED:
     )
 
 # =============================================================================
-# SECTION 2 — KPI DASHBOARD (animated counters via CSS)
+# SECTION 2 — KPI DASHBOARD
 # =============================================================================
 st.markdown(
     """
@@ -1199,7 +1145,7 @@ with left_col:
             )
         with f4:
             pesticides = st.number_input(
-                "🧪 Pesticides (tonnes)", min_value=0.0, max_value=200000.0,
+                "🧪 Pesticides (tonnes)", min_value=0.0, max_value=400000.0,
                 value=1500.0, step=10.0,
             )
 
@@ -1208,7 +1154,7 @@ with left_col:
             value=25.0, step=0.1,
         )
 
-        submitted = st.form_submit_button("🔮 Generate Yield Forecast", use_container_width=True)
+        submitted = st.form_submit_button("🔮 Generate Yield Forecast", width="stretch")
 
     if submitted:
         if not MODEL_LOADED:
@@ -1236,7 +1182,6 @@ with left_col:
                     }
                     st.session_state["show_result"] = True
 
-                    # Append to history
                     status_label, _, _, _ = yield_status(prediction)
                     st.session_state["prediction_history"].append({
                         "Timestamp":       datetime.now().strftime("%H:%M:%S"),
@@ -1320,7 +1265,6 @@ if st.session_state.get("show_result"):
         unsafe_allow_html=True,
     )
 
-    # ── Result card + gauge ───────────────────────────────────────────────────
     res_left, res_right = st.columns([1, 1], gap="large")
 
     with res_left:
@@ -1330,7 +1274,9 @@ if st.session_state.get("show_result"):
             hi = pred_value + confidence
             confidence_html = f'<div class="result-confidence">95% range: {lo:,.0f} – {hi:,.0f} hg/ha  (±{confidence:,.0f})</div>'
 
-        weather_particles_html = build_weather_particles(weather_theme, pred_inputs.get("rainfall", 0), pred_inputs.get("temperature", 25))
+        weather_particles_html = build_weather_particles(
+            weather_theme, pred_inputs.get("rainfall", 0), pred_inputs.get("temperature", 25)
+        )
         st.markdown(
             f"""
             <div class="result-card">
@@ -1347,17 +1293,14 @@ if st.session_state.get("show_result"):
             unsafe_allow_html=True,
         )
 
-        # Smart Warnings
         if warnings_list:
             warn_html = "<br>".join(warnings_list)
             st.markdown(f'<div class="warn-box">{warn_html}</div>', unsafe_allow_html=True)
 
     with res_right:
-        # Gauge chart
         gauge_fig = make_gauge_chart(pred_value)
-        st.plotly_chart(gauge_fig, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(gauge_fig, width="stretch", config={"displayModeBar": False})
 
-        # Weather theme banner
         weather_title, weather_desc = get_weather_description(weather_theme)
         st.markdown(
             f"""
@@ -1372,7 +1315,6 @@ if st.session_state.get("show_result"):
             unsafe_allow_html=True,
         )
 
-    # ── AI Recommendation Cards ───────────────────────────────────────────────
     insights = get_ai_recommendations(
         pred_crop,
         pred_inputs.get("rainfall", 0),
@@ -1404,7 +1346,7 @@ if st.session_state.get("show_result"):
     st.markdown(f'<div class="ai-insight-grid">{cards_html}</div>', unsafe_allow_html=True)
 
     # ==========================================================================
-    # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS  ← UNCHANGED LOGIC
+    # SECTION 4b — WHAT-IF SENSITIVITY ANALYSIS
     # ==========================================================================
     st.markdown('<hr class="fancy-divider">', unsafe_allow_html=True)
     st.markdown(
@@ -1457,25 +1399,29 @@ if st.session_state.get("show_result"):
             )
             return fig
 
+        def predict_batch(rows):
+            """One model call for many rows (much faster than looping)."""
+            return model.predict(np.array(rows, dtype=float)).astype(float).tolist()
+
         with whatif_tabs[0]:
-            temps   = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
-            yields_t = [float(model.predict([[base_year, base_rainfall, base_pesticides, t, area_enc, item_enc]])[0]) for t in temps]
-            st.plotly_chart(make_whatif_fig(temps, yields_t, "Temperature (°C)", base_temp, pred_value), use_container_width=True)
+            temps    = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
+            yields_t = predict_batch([[base_year, base_rainfall, base_pesticides, t, area_enc, item_enc] for t in temps])
+            st.plotly_chart(make_whatif_fig(temps, yields_t, "Temperature (°C)", base_temp, pred_value), width="stretch")
 
         with whatif_tabs[1]:
-            rains   = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
-            yields_r = [float(model.predict([[base_year, r, base_pesticides, base_temp, area_enc, item_enc]])[0]) for r in rains]
-            st.plotly_chart(make_whatif_fig(rains, yields_r, "Rainfall (mm/yr)", base_rainfall, pred_value), use_container_width=True)
+            rains    = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
+            yields_r = predict_batch([[base_year, r, base_pesticides, base_temp, area_enc, item_enc] for r in rains])
+            st.plotly_chart(make_whatif_fig(rains, yields_r, "Rainfall (mm/yr)", base_rainfall, pred_value), width="stretch")
 
         with whatif_tabs[2]:
-            pests   = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
-            yields_p = [float(model.predict([[base_year, base_rainfall, p, base_temp, area_enc, item_enc]])[0]) for p in pests]
-            st.plotly_chart(make_whatif_fig(pests, yields_p, "Pesticides (tonnes)", base_pesticides, pred_value), use_container_width=True)
+            pests    = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
+            yields_p = predict_batch([[base_year, base_rainfall, p, base_temp, area_enc, item_enc] for p in pests])
+            st.plotly_chart(make_whatif_fig(pests, yields_p, "Pesticides (tonnes)", base_pesticides, pred_value), width="stretch")
 
         with whatif_tabs[3]:
-            years   = np.arange(1990, 2031, 1)
-            yields_y = [float(model.predict([[int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc]])[0]) for y in years]
-            st.plotly_chart(make_whatif_fig(years, yields_y, "Year", base_year, pred_value), use_container_width=True)
+            years    = np.arange(1990, 2031, 1)
+            yields_y = predict_batch([[int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc] for y in years])
+            st.plotly_chart(make_whatif_fig(years, yields_y, "Year", base_year, pred_value), width="stretch")
 
 # =============================================================================
 # SECTION 5 — PREDICTION HISTORY
@@ -1565,7 +1511,7 @@ fig_fi.update_layout(
     yaxis=dict(showgrid=False),
     height=360,
 )
-st.plotly_chart(fig_fi, use_container_width=True)
+st.plotly_chart(fig_fi, width="stretch")
 
 # =============================================================================
 # SECTION 7 — MODEL PERFORMANCE
