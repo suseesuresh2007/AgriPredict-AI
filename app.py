@@ -11,9 +11,8 @@ import csv
 # =============================================================================
 # HTML RENDER FIX
 # Streamlit's markdown treats blank / whitespace-only lines as the end of an
-# HTML block and then renders indented lines as a code block. This wrapper
-# strips indentation and blank lines from every HTML snippet so cards, the
-# intro SVG and the result card always render correctly.
+# HTML block. This wrapper strips indentation and blank lines from every HTML
+# snippet so cards and the result card always render correctly.
 # =============================================================================
 _st_markdown = st.markdown
 
@@ -54,6 +53,55 @@ except Exception as e:
     MODEL_LOADED = False
     LOAD_ERROR = str(e)
     model, area_encoder, item_encoder = None, None, None
+
+# =============================================================================
+# FEATURE ORDER
+# The app builds rows as (year, rain, pest, temp, area, item).
+# The model must receive columns in the SAME order it was trained with.
+#
+# If the model stores its column names (scikit-learn >= 1.0 with a DataFrame),
+# the order is detected automatically. If the diagnostics panel says
+# "not stored", set the order manually here, using these keys:
+#   "year", "rain", "pest", "temp", "area", "item"
+# Example: FEATURE_ORDER_OVERRIDE = ["area", "item", "year", "rain", "pest", "temp"]
+# =============================================================================
+FEATURE_ORDER_OVERRIDE = None
+
+FEATURE_KEYS = ["year", "rain", "pest", "temp", "area", "item"]
+# "rain" is checked before "year" because names like "rain_per_year" contain "year"
+_NAME_RULES = [
+    ("rain", "rain"), ("pest", "pest"), ("temp", "temp"),
+    ("area", "area"), ("country", "area"),
+    ("item", "item"), ("crop", "item"), ("year", "year"),
+]
+
+
+def _key_for(name):
+    n = str(name).lower()
+    for token, key in _NAME_RULES:
+        if token in n:
+            return key
+    raise ValueError(f"Unrecognised model feature name: {name!r}")
+
+
+def make_X(rows):
+    """rows: list of (year, rain, pest, temp, area_enc, item_enc).
+    Returns model input arranged in the model's own training column order."""
+    if FEATURE_ORDER_OVERRIDE:
+        idx = [FEATURE_KEYS.index(k) for k in FEATURE_ORDER_OVERRIDE]
+        return np.array([[r[i] for i in idx] for r in rows], dtype=float)
+
+    names = getattr(model, "feature_names_in_", None)
+    if names is None:
+        return np.array(rows, dtype=float)
+
+    idx = [FEATURE_KEYS.index(_key_for(n)) for n in names]
+    if len(idx) != 6 or len(set(idx)) != 6:
+        raise ValueError(
+            f"Model expects {len(names)} features {list(names)}; this app supports "
+            "6 label-encoded features (year, rainfall, pesticides, temperature, country, crop)."
+        )
+    return pd.DataFrame([[r[i] for i in idx] for r in rows], columns=list(names))
 
 # =============================================================================
 # STATIC PROJECT DATA
@@ -132,19 +180,19 @@ if "prediction_history" not in st.session_state:
     st.session_state["prediction_history"] = []
 if "show_result" not in st.session_state:
     st.session_state["show_result"] = False
-if "intro_played" not in st.session_state:
-    st.session_state["intro_played"] = False
 
 # =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
-def get_confidence_range(model, features):
-    """Use per-tree spread for a ~95% interval (1.96 x std dev)."""
+def get_confidence_range(model, X):
+    """Per-tree spread for a ~95% interval (1.96 x std dev)."""
     try:
-        preds = np.array([tree.predict(features)[0] for tree in model.estimators_])
+        Xn = np.asarray(X, dtype=np.float32)
+        preds = np.array([tree.predict(Xn)[0] for tree in model.estimators_])
         return float(1.96 * np.std(preds))
     except Exception:
         return None
+
 
 def get_warnings(crop, rainfall, pesticides, temperature):
     """Return list of smart warnings for out-of-range or unusual inputs."""
@@ -168,6 +216,7 @@ def get_warnings(crop, rainfall, pesticides, temperature):
         warnings.append("☀️ Very low rainfall combined with high temperature suggests drought-stress conditions.")
     return warnings
 
+
 def yield_status(val):
     if val < 20000:
         return "Low Yield", "status-low", "#ff6b6b", 20
@@ -178,12 +227,12 @@ def yield_status(val):
     else:
         return "Excellent Yield", "status-excellent", "#34e89e", 98
 
+
 def export_history_csv(history):
     output = io.StringIO()
     if not history:
         return ""
-    keys = history[0].keys()
-    writer = csv.DictWriter(output, fieldnames=keys)
+    writer = csv.DictWriter(output, fieldnames=history[0].keys())
     writer.writeheader()
     writer.writerows(history)
     return output.getvalue()
@@ -192,7 +241,6 @@ def export_history_csv(history):
 # WEATHER THEME HELPERS
 # =============================================================================
 def get_weather_theme(rainfall, temperature):
-    """Determine weather theme from inputs for dynamic visual effects."""
     if rainfall < 200 and temperature > 28:
         return "drought"
     elif rainfall > 2000:
@@ -204,6 +252,7 @@ def get_weather_theme(rainfall, temperature):
     else:
         return "temperate"
 
+
 def get_weather_description(theme):
     desc = {
         "drought": ("☀️ Drought Conditions", "Low rainfall + high heat. Stress-tolerant crops recommended."),
@@ -214,11 +263,10 @@ def get_weather_description(theme):
     }
     return desc.get(theme, ("🌍 Variable Climate", "Mixed conditions detected."))
 
+
 def get_ai_recommendations(crop, rainfall, temperature, pesticides, pred_value):
-    """Generate contextual AI insight cards based on inputs."""
     insights = []
 
-    # Yield tier insight
     if pred_value >= 100000:
         insights.append(("🏆", "Excellent Yield Potential", "Predicted yield is in the top tier. Current conditions align well with this crop's optimal growth profile."))
     elif pred_value >= 50000:
@@ -228,13 +276,11 @@ def get_ai_recommendations(crop, rainfall, temperature, pesticides, pred_value):
     else:
         insights.append(("⚠️", "Below-Average Yield Risk", "Consider switching to a drought-tolerant variety or adjusting the growing season."))
 
-    # Rainfall insight
     if rainfall < 400:
         insights.append(("💧", "Irrigation Advisory", f"At {rainfall:.0f} mm/yr, supplemental irrigation is likely needed. Consider drip systems for efficiency."))
     elif rainfall > 2500:
         insights.append(("🌊", "Drainage Management", f"High rainfall ({rainfall:.0f} mm/yr) may cause waterlogging. Ensure raised beds and adequate drainage channels."))
 
-    # Temperature insight
     if crop in CROP_TYPICAL_TEMP:
         ct_min, ct_max = CROP_TYPICAL_TEMP[crop]
         if ct_min <= temperature <= ct_max:
@@ -242,13 +288,12 @@ def get_ai_recommendations(crop, rainfall, temperature, pesticides, pred_value):
         elif temperature > ct_max:
             insights.append(("🔥", "Heat Stress Risk", f"At {temperature:.1f}°C, {crop} may experience heat stress. Consider shade netting or shifting harvest calendar."))
 
-    # Pesticide insight
     if pesticides < 100:
         insights.append(("🌿", "Low Pesticide Input", "Minimal chemical inputs detected. Monitor for pest pressure — biological controls may supplement protection."))
     elif pesticides > 50000:
         insights.append(("🧪", "High Chemical Input", "Elevated pesticide usage. Review application efficiency and consider integrated pest management (IPM)."))
 
-    return insights[:4]  # Cap at 4 cards
+    return insights[:4]
 
 # =============================================================================
 # ANIMATED HERO BACKGROUND BUILDERS
@@ -267,6 +312,7 @@ def build_rain_html(n=50):
             f'height:{height}px;opacity:{opacity};"></span>'
         )
     return f'<div class="rain-layer">{"".join(drops)}</div>'
+
 
 def build_floating_html():
     agri_icons = ["🌾", "🌿", "🍃", "🌱", "🍂"]
@@ -298,8 +344,9 @@ def build_floating_html():
         )
     return f'<div class="float-layer">{"".join(spans)}</div>'
 
-def build_weather_particles(theme, rainfall=0, temperature=25):
-    """Render dynamic weather-themed particles based on climate inputs."""
+
+def build_weather_particles(theme):
+    """Dynamic weather-themed particles based on climate inputs."""
     if theme == "drought":
         particles = []
         for _ in range(20):
@@ -360,20 +407,15 @@ def build_weather_particles(theme, rainfall=0, temperature=25):
 # PLOTLY GAUGE CHART
 # =============================================================================
 def make_gauge_chart(value, max_val=200000):
-    """Premium gauge chart for yield display."""
     pct = min(value / max_val, 1.0)
     if pct < 0.2:
-        gauge_color = "#ff6b6b"
-        bar_color = "rgba(255,107,107,0.85)"
+        gauge_color, bar_color = "#ff6b6b", "rgba(255,107,107,0.85)"
     elif pct < 0.5:
-        gauge_color = "#ffd27a"
-        bar_color = "rgba(255,210,122,0.85)"
+        gauge_color, bar_color = "#ffd27a", "rgba(255,210,122,0.85)"
     elif pct < 0.8:
-        gauge_color = "#6dffb0"
-        bar_color = "rgba(109,255,176,0.85)"
+        gauge_color, bar_color = "#6dffb0", "rgba(109,255,176,0.85)"
     else:
-        gauge_color = "#34e89e"
-        bar_color = "rgba(52,232,158,0.9)"
+        gauge_color, bar_color = "#34e89e", "rgba(52,232,158,0.9)"
 
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
@@ -421,8 +463,8 @@ def make_gauge_chart(value, max_val=200000):
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)",
         font={"family": "Inter", "color": "#eaf6ee"},
-        margin=dict(l=20, r=20, t=30, b=10),
-        height=230,
+        margin=dict(l=20, r=20, t=60, b=10),  # taller top margin: title no longer clipped
+        height=260,
     )
     return fig
 
@@ -862,28 +904,6 @@ div[data-baseweb="select"] > div {
     box-shadow: 0 20px 40px -10px rgba(15,174,102,0.85) !important;
 }
 
-.loading-wrap {
-    display: flex; align-items: center; gap: 14px;
-    padding: 20px 24px;
-    background: var(--glass);
-    border: 1px solid var(--glass-border);
-    border-radius: 16px;
-    margin: 16px 0;
-}
-.loading-dots span {
-    display: inline-block;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: var(--neon);
-    animation: dotBounce 1.2s ease-in-out infinite;
-    margin: 0 3px;
-}
-.loading-dots span:nth-child(2) { animation-delay: 0.15s; }
-.loading-dots span:nth-child(3) { animation-delay: 0.30s; }
-@keyframes dotBounce {
-    0%,80%,100% { transform: scale(0.6); opacity: 0.4; }
-    40%         { transform: scale(1.2); opacity: 1;   }
-}
-
 .stTabs [data-baseweb="tab-list"] {
     background: var(--glass) !important;
     border-radius: 14px !important;
@@ -916,132 +936,6 @@ div[data-baseweb="select"] > div {
 """
 
 st.markdown(f"<style>{CUSTOM_CSS}</style>", unsafe_allow_html=True)
-
-# =============================================================================
-# INTRO SPLASH — water pour, then a bushy plant grows, then the app reveals.
-# Plays once per session.
-# =============================================================================
-INTRO_OVERLAY_HTML = """
-<style>
-#intro-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 999999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: radial-gradient(ellipse 60% 50% at 50% 30%, rgba(15,174,102,0.10), transparent),
-                linear-gradient(180deg, #050d09 0%, #080f0b 100%);
-    animation: introOverlayOut 4.6s ease forwards;
-}
-@keyframes introOverlayOut {
-    0%, 84% { opacity: 1; visibility: visible; pointer-events: all; }
-    100%    { opacity: 0; visibility: hidden; pointer-events: none; }
-}
-#intro-overlay svg { width: min(70vw, 320px); height: auto; overflow: visible; }
-.intro-drop {
-    animation: introDropFall 0.85s cubic-bezier(.55,0,.85,.35) forwards;
-}
-@keyframes introDropFall {
-    0%   { transform: translateY(-90px); opacity: 1; }
-    88%  { transform: translateY(150px); opacity: 1; }
-    100% { transform: translateY(150px); opacity: 0; }
-}
-.intro-ripple {
-    opacity: 0;
-    transform-origin: 120px 240px;
-    animation: introRipple 0.6s ease-out forwards;
-    animation-delay: 0.80s;
-}
-.intro-ripple.r2 { animation-delay: 0.90s; }
-@keyframes introRipple {
-    0%   { opacity: 0.9; transform: scale(0.2); }
-    100% { opacity: 0;   transform: scale(1.7); }
-}
-.intro-stem {
-    stroke-dasharray: 100;
-    stroke-dashoffset: 100;
-    animation: introStemGrow 1.3s cubic-bezier(.4,0,.2,1) forwards;
-    animation-delay: 1.05s;
-}
-@keyframes introStemGrow {
-    to { stroke-dashoffset: 0; }
-}
-.intro-leaf { opacity: 0; transform: scale(0); animation: introLeafPop 0.55s cubic-bezier(.34,1.56,.64,1) forwards; }
-.intro-leaf.l1 { animation-delay: 1.55s; }
-.intro-leaf.l2 { animation-delay: 1.78s; }
-.intro-leaf.l3 { animation-delay: 2.01s; }
-.intro-leaf.l4 { animation-delay: 2.24s; }
-.intro-leaf.l5 { animation-delay: 2.47s; }
-.intro-leaf.l6 { animation-delay: 2.70s; }
-.intro-leaf.l7 { animation-delay: 2.93s; }
-.intro-leaf.l8 { animation-delay: 3.10s; }
-@keyframes introLeafPop {
-    0%   { opacity: 0; transform: scale(0); }
-    70%  { opacity: 1; }
-    100% { opacity: 1; transform: scale(1); }
-}
-.intro-glow {
-    opacity: 0;
-    animation: introGlowIn 0.8s ease forwards;
-    animation-delay: 3.30s;
-}
-@keyframes introGlowIn { to { opacity: 1; } }
-.intro-caption {
-    position: absolute;
-    bottom: 13%;
-    left: 50%;
-    transform: translateX(-50%);
-    color: #8eb09e;
-    font-family: 'Inter', sans-serif;
-    font-size: 13px;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    opacity: 0;
-    animation: introCaptionIn 0.8s ease forwards;
-    animation-delay: 3.45s;
-    white-space: nowrap;
-}
-@keyframes introCaptionIn { to { opacity: 0.85; } }
-</style>
-<div id="intro-overlay">
-<svg viewBox="0 0 240 320">
-<defs>
-<linearGradient id="stemGrad" x1="0" y1="1" x2="0" y2="0">
-<stop offset="0%" stop-color="#0fae66"/>
-<stop offset="100%" stop-color="#6dffb0"/>
-</linearGradient>
-<radialGradient id="leafGrad" cx="30%" cy="30%" r="80%">
-<stop offset="0%" stop-color="#8dffc4"/>
-<stop offset="100%" stop-color="#0fae66"/>
-</radialGradient>
-<radialGradient id="glowGrad" cx="50%" cy="50%" r="50%">
-<stop offset="0%" stop-color="rgba(109,255,176,0.35)"/>
-<stop offset="100%" stop-color="rgba(109,255,176,0)"/>
-</radialGradient>
-</defs>
-<ellipse class="intro-glow" cx="120" cy="150" rx="110" ry="130" fill="url(#glowGrad)"/>
-<line x1="30" y1="240" x2="210" y2="240" stroke="rgba(109,255,176,0.30)" stroke-width="2"/>
-<path class="intro-drop" d="M120,60 C126,72 138,86 138,98 C138,108.5 130,116 120,116 C110,116 102,108.5 102,98 C102,86 114,72 120,60 Z" fill="#6dffb0"/>
-<ellipse class="intro-ripple" cx="120" cy="240" rx="14" ry="5" fill="none" stroke="#6dffb0" stroke-width="2"/>
-<ellipse class="intro-ripple r2" cx="120" cy="240" rx="18" ry="6" fill="none" stroke="#34e89e" stroke-width="1.5"/>
-<path class="intro-stem" d="M120,240 C118,205 122,170 120,135 C118,110 121,90 120,68" fill="none" stroke="url(#stemGrad)" stroke-width="4" stroke-linecap="round" pathLength="100"/>
-<g class="intro-leaf l1" transform="translate(120,222) rotate(-38)"><path d="M0,0 C14,-4 28,-2 34,6 C28,14 14,12 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l2" transform="translate(120,214) rotate(35)"><path d="M0,0 C-13,-5 -25,-2 -31,6 C-25,13 -13,11 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l3" transform="translate(121,188) rotate(-32)"><path d="M0,0 C13,-5 24,-2 30,6 C24,13 13,11 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l4" transform="translate(119,180) rotate(30)"><path d="M0,0 C-12,-5 -23,-2 -29,6 C-23,13 -12,11 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l5" transform="translate(121,150) rotate(-28)"><path d="M0,0 C11,-4 20,-1 25,5 C20,11 11,9 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l6" transform="translate(119,144) rotate(26)"><path d="M0,0 C-10,-4 -19,-1 -24,5 C-19,11 -10,9 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l7" transform="translate(120,110) rotate(-20)"><path d="M0,0 C9,-4 16,-1 20,4 C16,9 9,7 0,0 Z" fill="url(#leafGrad)"/></g>
-<g class="intro-leaf l8" transform="translate(120,72) rotate(0)"><path d="M0,-2 C7,-10 8,-20 4,-27 C-2,-20 -3,-10 0,-2 Z" fill="url(#leafGrad)"/></g>
-</svg>
-<div class="intro-caption">AgriPredict AI</div>
-</div>
-"""
-
-if not st.session_state["intro_played"]:
-    st.session_state["intro_played"] = True
-    st.markdown(INTRO_OVERLAY_HTML, unsafe_allow_html=True)
 
 # =============================================================================
 # SECTION 1 — HERO
@@ -1162,11 +1056,11 @@ with left_col:
         else:
             with st.spinner("Running AI prediction model…"):
                 try:
-                    area_encoded  = area_encoder.transform([country])[0]
-                    item_encoded  = item_encoder.transform([crop])[0]
-                    features      = np.array([[year, rainfall, pesticides, temperature, area_encoded, item_encoded]])
-                    prediction    = float(model.predict(features)[0])
-                    confidence    = get_confidence_range(model, features)
+                    area_encoded = area_encoder.transform([country])[0]
+                    item_encoded = item_encoder.transform([crop])[0]
+                    X = make_X([(year, rainfall, pesticides, temperature, area_encoded, item_encoded)])
+                    prediction = float(model.predict(X)[0])
+                    confidence = get_confidence_range(model, X)
                     warnings_list = get_warnings(crop, rainfall, pesticides, temperature)
                     weather_theme = get_weather_theme(rainfall, temperature)
 
@@ -1274,9 +1168,7 @@ if st.session_state.get("show_result"):
             hi = pred_value + confidence
             confidence_html = f'<div class="result-confidence">95% range: {lo:,.0f} – {hi:,.0f} hg/ha  (±{confidence:,.0f})</div>'
 
-        weather_particles_html = build_weather_particles(
-            weather_theme, pred_inputs.get("rainfall", 0), pred_inputs.get("temperature", 25)
-        )
+        weather_particles_html = build_weather_particles(weather_theme)
         st.markdown(
             f"""
             <div class="result-card">
@@ -1363,12 +1255,12 @@ if st.session_state.get("show_result"):
     if MODEL_LOADED:
         whatif_tabs = st.tabs(["🌡️ Temperature", "🌧️ Rainfall", "🧪 Pesticides", "📅 Year"])
 
-        base_year        = pred_inputs.get("year", 2024)
-        base_rainfall    = pred_inputs.get("rainfall", 1100.0)
-        base_pesticides  = pred_inputs.get("pesticides", 1500.0)
-        base_temp        = pred_inputs.get("temperature", 25.0)
-        area_enc         = area_encoder.transform([pred_country])[0]
-        item_enc         = item_encoder.transform([pred_crop])[0]
+        base_year       = pred_inputs.get("year", 2024)
+        base_rainfall   = pred_inputs.get("rainfall", 1100.0)
+        base_pesticides = pred_inputs.get("pesticides", 1500.0)
+        base_temp       = pred_inputs.get("temperature", 25.0)
+        area_enc        = area_encoder.transform([pred_country])[0]
+        item_enc        = item_encoder.transform([pred_crop])[0]
 
         def make_whatif_fig(x_vals, yields, x_label, current_x, current_y):
             fig = go.Figure()
@@ -1400,27 +1292,27 @@ if st.session_state.get("show_result"):
             return fig
 
         def predict_batch(rows):
-            """One model call for many rows (much faster than looping)."""
-            return model.predict(np.array(rows, dtype=float)).astype(float).tolist()
+            """One model call for many rows, in the model's own column order."""
+            return model.predict(make_X(rows)).astype(float).tolist()
 
         with whatif_tabs[0]:
             temps    = np.linspace(max(-10, base_temp - 15), min(50, base_temp + 15), 60)
-            yields_t = predict_batch([[base_year, base_rainfall, base_pesticides, t, area_enc, item_enc] for t in temps])
+            yields_t = predict_batch([(base_year, base_rainfall, base_pesticides, t, area_enc, item_enc) for t in temps])
             st.plotly_chart(make_whatif_fig(temps, yields_t, "Temperature (°C)", base_temp, pred_value), width="stretch")
 
         with whatif_tabs[1]:
             rains    = np.linspace(max(0, base_rainfall - 800), base_rainfall + 800, 60)
-            yields_r = predict_batch([[base_year, r, base_pesticides, base_temp, area_enc, item_enc] for r in rains])
+            yields_r = predict_batch([(base_year, r, base_pesticides, base_temp, area_enc, item_enc) for r in rains])
             st.plotly_chart(make_whatif_fig(rains, yields_r, "Rainfall (mm/yr)", base_rainfall, pred_value), width="stretch")
 
         with whatif_tabs[2]:
             pests    = np.linspace(max(0, base_pesticides - 2000), base_pesticides + 2000, 60)
-            yields_p = predict_batch([[base_year, base_rainfall, p, base_temp, area_enc, item_enc] for p in pests])
+            yields_p = predict_batch([(base_year, base_rainfall, p, base_temp, area_enc, item_enc) for p in pests])
             st.plotly_chart(make_whatif_fig(pests, yields_p, "Pesticides (tonnes)", base_pesticides, pred_value), width="stretch")
 
         with whatif_tabs[3]:
             years    = np.arange(1990, 2031, 1)
-            yields_y = predict_batch([[int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc] for y in years])
+            yields_y = predict_batch([(int(y), base_rainfall, base_pesticides, base_temp, area_enc, item_enc) for y in years])
             st.plotly_chart(make_whatif_fig(years, yields_y, "Year", base_year, pred_value), width="stretch")
 
 # =============================================================================
@@ -1546,6 +1438,35 @@ for col, (title, num) in zip([m1, m2, m3], [
         )
 
 # =============================================================================
+# SECTION 7b — MODEL DIAGNOSTICS
+# =============================================================================
+if MODEL_LOADED:
+    with st.expander("🔧 Model diagnostics"):
+        names = getattr(model, "feature_names_in_", None)
+        st.write(
+            "Features the model reports, in order:",
+            list(names) if names is not None else "not stored (trained on a plain array)",
+        )
+        st.write("Order the app is using:", FEATURE_ORDER_OVERRIDE or "auto-detected / default (year, rain, pest, temp, area, item)")
+        try:
+            a = area_encoder.transform([COUNTRY_OPTIONS[0]])[0]
+            test_rows = [
+                (2024, 1100.0, 1500.0, 25.0, a, item_encoder.transform([c])[0])
+                for c in CROP_OPTIONS
+            ]
+            out = model.predict(make_X(test_rows))
+            st.dataframe(
+                pd.DataFrame({"Crop": CROP_OPTIONS, "Predicted hg/ha": np.round(out, 0)}),
+                hide_index=True,
+            )
+            if np.ptp(out) < 1:
+                st.error("Identical output for every crop: feature order or training is broken.")
+            else:
+                st.success("Output varies by crop. Compare against known yields to sanity-check the order.")
+        except Exception as e:
+            st.error(f"Diagnostic failed: {e}")
+
+# =============================================================================
 # SECTION 8 — ABOUT
 # =============================================================================
 st.markdown('<hr class="fancy-divider">', unsafe_allow_html=True)
@@ -1573,8 +1494,7 @@ st.markdown(
         crop variety, and year as predictive features. It achieves an
         <b>R² of {R2_SCORE}%</b> on a held-out test set.
         <br><br>
-        <b>This version adds:</b> an opening water-pour &amp; plant-growth intro ·
-        Plotly gauge charts · dynamic weather theme effects · per-theme climate
+        <b>Features:</b> Plotly gauge charts · dynamic weather theme effects · per-theme climate
         particles · AI recommendation cards · animated KPI counters · glassmorphism
         design system · per-tree confidence intervals · what-if sensitivity explorer ·
         session history with CSV export.
